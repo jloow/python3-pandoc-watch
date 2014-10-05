@@ -41,7 +41,8 @@ def which(program):
 class Singleton(type):
     """ Dead-simple singleton metaclass.
 
-    Taken from http://stackoverflow.com/questions/6760685/creating-a-singleton-in-python
+    Taken from:
+    http://stackoverflow.com/questions/6760685/creating-a-singleton-in-python
     """
     _instances = {}
     def __call__(cls, *args, **kwargs):
@@ -98,6 +99,8 @@ def recompile():
 
 
 class ChangeHandler(FileSystemEventHandler):
+    """Handler for watching a folder for changes and running pandoc."""
+
     def on_modified(self, event):
         config = Configuration()
         local_dir_content = config.watched_elements()
@@ -166,7 +169,7 @@ def setup_config(args_parser):
     config.command = "pandoc " + pandoc_options
 
 
-def main(): # pylint: disable-msg=C0111
+def main(): #pylint: disable=missing-docstring
     pandoc_path = which("pandoc")
     if not pandoc_path:
         print("pandoc executable must be in the path!", file=sys.stderr)
