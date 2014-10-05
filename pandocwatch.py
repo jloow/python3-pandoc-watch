@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python3
 
 import os
 import sys
@@ -30,51 +30,17 @@ def which(program):
 
     return None
 
-class Singleton:
-    """
-    A non-thread-safe helper class to ease implementing singletons.
-    This should be used as a decorator -- not a metaclass -- to the
-    class that should be a singleton.
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
 
-    The decorated class can define one `__init__` function that
-    takes only the `self` argument. Other than that, there are
-    no restrictions that apply to the decorated class.
+class Configuration(metaclass=Singleton):
 
-    To get the singleton instance, use the `Instance` method. Trying
-    to use `__call__` will result in a `TypeError` being raised.
-
-    Limitations: The decorated class cannot be inherited from.
-
-    This singleton class is taken from http://stackoverflow.com/questions/42558/python-and-the-singleton-pattern
-
-    """
-
-    def __init__(self, decorated):
-        self._decorated = decorated
-
-    def Instance(self):
-        """
-        Returns the singleton instance. Upon its first call, it creates a
-        new instance of the decorated class and calls its `__init__` method.
-        On all subsequent calls, the already created instance is returned.
-
-        """
-        try:
-            return self._instance
-        except AttributeError:
-            self._instance = self._decorated()
-            return self._instance
-
-    def __call__(self):
-        raise TypeError('Singletons must be accessed through `Instance()`.')
-
-    def __instancecheck__(self, inst):
-        return isinstance(inst, self._decorated)
-
-
-@Singleton
-class Configuration:
     def __init__(self):
+        print('inside {}'.format(self))
         self._command = ""
         self._dirContentAndTime = ""
         self._excludedFileExtensions = []
@@ -113,87 +79,87 @@ def get_now():
     return datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
 def getDirectoryWatchedElements():
-    config = Configuration.Instance()
+    config = Configuration()
     elements = []
-    for path in os.listdir(os.getcwd()) :
-        path_to_remove = False;
-        for extension in config.getExcludedFileExtensions() :
-            if path.endswith(extension) :
+    for path in os.listdir(os.getcwd()):
+        path_to_remove = False
+        for extension in config.getExcludedFileExtensions():
+            if path.endswith(extension):
                 path_to_remove = True
                 break
-        if not path_to_remove and not path in config.getExcludedFolders() :
+        if not path_to_remove and not path in config.getExcludedFolders():
             elements.append((path,os.stat(path).st_mtime))
-
     return elements
 
 def recompile():
-
-    config = Configuration.Instance()
-    print >> sys.stderr, "Updating the output at %s" % get_now()
-    print "executing command : " + config.getCommand()
-    #print "path : " + os.path.abspath(".")
+    config = Configuration()
+    print("Updating the output at %s" % get_now(), file=sys.stderr)
+    print("executing command : {}".format(config.getCommand()))
     os.chdir(os.path.abspath(os.getcwd()))
-    try :
-        output = subprocess.check_output(config.getCommand(),stderr=subprocess.STDOUT,shell=True)
-        #print output
-        print "No error found"
+    try:
+        output = subprocess.check_output(
+            config.getCommand(),
+            stderr=subprocess.STDOUT,
+            shell=True,
+            universal_newlines=True
+        )
+        print("No error found")
     except subprocess.CalledProcessError as err:
-        print "Error : " + err.output
-        #print "Error append"
-
+        print("Error:\n{}".format(err.output))
 
 class ChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
-        config = Configuration.Instance()
+        config = Configuration()
         local_dir_content = getDirectoryWatchedElements()
-
-        #print "event type : " + str(event)
-        #print "changed raised for file : " + event.src_path
         found = False
-        # serching for existing file that has been modified
-        for (path,m_time) in local_dir_content :
+        for (path, m_time) in local_dir_content:
             for (bpath,bm_time) in config.getDirContentAndTime() :
                 if path == bpath :
                     if m_time > bm_time :
-                        print "File " + path + " has changed. Recompiling."
+                        print("File {} has changed. Recompiling.".format(path))
                         found = True
 
                         config.setDirContentAndTime(local_dir_content)
                         recompile()
-                        print "Recompilation done"
+                        print("Recompilation done")
                         break
             if found :
                 break
-        #if not found :
-        #    #it's a new file
-        #    print "New file found. Recompiling."
-        #    recompile()
 
-def parseOptions():
-    pandoc_output = subprocess.Popen(["pandoc", "--help"], stdout=subprocess.PIPE).communicate()[0]
-    added_epilog = '\n'.join(pandoc_output.split("\n")[1:])
-    epilog = "-------------------------------------------\nPandoc standard options are: \n\n" + added_epilog
-    #print epilog
-    parser = argparse.ArgumentParser(description="Watcher for pandoc compilation", epilog=epilog,formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("-e", "--exclude", dest="exclusions", default=".pdf,.tex,doc,bin,common", required=False,
-                        help="The extensions (.pdf for pdf files) or the folders to exclude from watch operations separated with commas")
-    #parser.add_argument(dest='command', nargs=argparse.REMAINDER)
+def parse_options():
+    pandoc_output = subprocess.check_output(["pandoc", "--help"],
+                                            universal_newlines=True)
+    added_epilog = '\n'.join(str(pandoc_output).split("\n")[1:])
+    epilog = ("-------------------------------------------\n"
+              "Pandoc standard options are: \n\n{}"
+              .format(added_epilog))
+    parser = argparse.ArgumentParser(
+        description="Watcher for pandoc compilation",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("-e", "--exclude",
+                        dest="exclusions",
+                        default=".pdf,.tex,doc,bin,common",
+                        required=False,
+                        help="The extensions (.pdf for pdf files) "
+                             "or the folders to exclude from watch "
+                             "operationsr, separated by commas")
     args = parser.parse_known_args()
-
-    #print str(args)
 
     exclusions = args[0].exclusions
     exclusions = exclusions.split(",")
 
-    config = Configuration.Instance()
+    config = Configuration()
 
-    config.setExcludedFileExtensions([value for value in exclusions if value.startswith(".")])
-    config.setExcludedFolders(list(set(exclusions).symmetric_difference(set(config.getExcludedFileExtensions()))))
+    config.setExcludedFileExtensions(
+        [value for value in exclusions if value.startswith(".")])
+    config.setExcludedFolders(
+        list(set(exclusions).symmetric_difference(set(config.getExcludedFileExtensions()))))
 
     pandoc_options = ' '.join(args[1])
 
     if not pandoc_options :
-        print "pandoc options must be provided!\n"
+        print("pandoc options must be provided!\n")
         parser.print_help()
         exit()
 
@@ -203,16 +169,16 @@ def main():
 
     pandoc_path = which("pandoc")
     if not pandoc_path :
-        print "pandoc executable must be in the path to be used by pandoc-watch!"
+        print("pandoc executable must be in the path to be used by pandoc-watch!")
         exit()
 
-    config = Configuration.Instance()
+    config = Configuration()
 
-    parseOptions()
+    parse_options()
 
     config.setDirContentAndTime(getDirectoryWatchedElements())
 
-    print "Starting pandoc watcher ..."
+    print("Starting pandoc watcher ...")
 
     while True:
         event_handler = ChangeHandler()
@@ -223,10 +189,10 @@ def main():
             while True:
                 time.sleep(1)
         except KeyboardInterrupt as err:
-            print str(err)
+            print(str(err))
             observer.stop()
 
-        print "Stopping pandoc watcher ..."
+        print("Stopping pandoc watcher ...")
 
         exit()
 
