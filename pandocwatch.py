@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Watch a directory for updates and run pandoc when it changes.
+"""
 
 import os
 import sys
@@ -9,15 +11,21 @@ import argparse
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-def which(program):
-    """
-    This function is taken from http://stackoverflow.com/questions/377017/test-if-executable-exists-in-python
-    """
-    import os
-    def is_exe(fpath):
-        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
 
-    fpath, fname = os.path.split(program)
+def which(program):
+    """Locates a program in the user's $PATH.
+
+    This function is taken from
+    http://stackoverflow.com/questions/377017/test-if-executable-exists-in-python
+
+    Args:
+        program: The program we wish to find.
+
+    Returns:
+        Path to the executable or None if not found.
+    """
+    is_exe = lambda fpath: os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+    fpath, _ = os.path.split(program)
     if fpath:
         if is_exe(program):
             return program
@@ -27,8 +35,8 @@ def which(program):
             exe_file = os.path.join(path, program)
             if is_exe(exe_file):
                 return exe_file
-
     return None
+
 
 class Singleton(type):
     """ Dead-simple singleton metaclass.
@@ -38,71 +46,93 @@ class Singleton(type):
     _instances = {}
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+            cls._instances[cls] = super(Singleton, cls).__call__(*args,
+                                                                 **kwargs)
         return cls._instances[cls]
 
+
 class Configuration(metaclass=Singleton):
+    """ Configuration for pandocwatch. """
 
     def __init__(self):
-        print('inside {}'.format(self))
         self._command = ""
         self._dirContentAndTime = ""
         self._excludedFileExtensions = []
         self._excludedFolders = []
 
-    def setCommand(self, command):
+    def set_command(self, command):
         self._command = command
 
-    def getCommand(self):
+    def get_command(self):
         return self._command
 
-    def setExcludedFileExtensions(self, excluded_file_extensions):
+    def set_excluded_file_extensions(self, excluded_file_extensions):
         self._excludedFileExtensions = excluded_file_extensions
 
-    def getExcludedFileExtensions(self):
+    def get_excluded_file_extensions(self):
         return self._excludedFileExtensions
 
-    def setDirContentAndTime(self, dir_content_and_time):
+    def set_dir_content_and_time(self, dir_content_and_time):
         self._dirContentAndTime = dir_content_and_time
 
-    def getDirContentAndTime(self):
+    def get_dir_content_and_time(self):
         return self._dirContentAndTime
 
-    def setExcludedFolders(self,excluded_folders):
+    def set_execluded_folders(self,excluded_folders):
         self._excludedFolders = excluded_folders
 
-    def getExcludedFolders(self):
+    def get_execluded_folders(self):
         return self._excludedFolders
 
+
 def getext(filename):
-    "Get the file extension."
+    """Get the file extension.
+
+    Args:
+        filename: The pathname to the file.
+
+    Returns:
+        The extension of the filename in lowercase.
+    """
 
     return os.path.splitext(filename)[-1].lower()
 
+
 def get_now():
+    """Gets the current date and time.
+
+    Returns:
+        The current date and time, formatted for this program's UI.
+    """
     return datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
-def getDirectoryWatchedElements():
+
+def get_directory_watched_elements():
     config = Configuration()
     elements = []
     for path in os.listdir(os.getcwd()):
         path_to_remove = False
-        for extension in config.getExcludedFileExtensions():
+        for extension in config.get_excluded_file_extensions():
             if path.endswith(extension):
                 path_to_remove = True
                 break
-        if not path_to_remove and not path in config.getExcludedFolders():
-            elements.append((path,os.stat(path).st_mtime))
+        if not path_to_remove and not path in config.get_execluded_folders():
+            elements.append((path, os.stat(path).st_mtime))
     return elements
 
+
 def recompile():
+    """Run pandoc, printing the program's output.
+
+    Writes the error to STDOUT if present.
+    """
     config = Configuration()
     print("Updating the output at %s" % get_now(), file=sys.stderr)
-    print("executing command : {}".format(config.getCommand()))
+    print("executing command : {}".format(config.get_command()))
     os.chdir(os.path.abspath(os.getcwd()))
     try:
-        output = subprocess.check_output(
-            config.getCommand(),
+        subprocess.check_output(
+            config.get_command(),
             stderr=subprocess.STDOUT,
             shell=True,
             universal_newlines=True
@@ -111,24 +141,26 @@ def recompile():
     except subprocess.CalledProcessError as err:
         print("Error:\n{}".format(err.output))
 
+
 class ChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         config = Configuration()
-        local_dir_content = getDirectoryWatchedElements()
+        local_dir_content = get_directory_watched_elements()
         found = False
         for (path, m_time) in local_dir_content:
-            for (bpath,bm_time) in config.getDirContentAndTime() :
-                if path == bpath :
-                    if m_time > bm_time :
+            for (bpath, bm_time) in config.get_dir_content_and_time():
+                if path == bpath:
+                    if m_time > bm_time:
                         print("File {} has changed. Recompiling.".format(path))
                         found = True
 
-                        config.setDirContentAndTime(local_dir_content)
+                        config.set_dir_content_and_time(local_dir_content)
                         recompile()
                         print("Recompilation done")
                         break
-            if found :
+            if found:
                 break
+
 
 def parse_options():
     pandoc_output = subprocess.check_output(["pandoc", "--help"],
@@ -146,8 +178,8 @@ def parse_options():
                         default=".pdf,.tex,doc,bin,common",
                         required=False,
                         help="The extensions (.pdf for pdf files) "
-                             "or the folders to exclude from watch "
-                             "operationsr, separated by commas")
+                        "or the folders to exclude from watch "
+                        "operationsr, separated by commas")
     args = parser.parse_known_args()
 
     exclusions = args[0].exclusions
@@ -155,35 +187,33 @@ def parse_options():
 
     config = Configuration()
 
-    config.setExcludedFileExtensions(
+    config.set_excluded_file_extensions(
         [value for value in exclusions if value.startswith(".")])
-    config.setExcludedFolders(
-        list(set(exclusions).symmetric_difference(set(config.getExcludedFileExtensions()))))
+    config.set_execluded_folders(
+        list(set(exclusions)
+             .symmetric_difference(set(config.get_excluded_file_extensions()))))
 
     pandoc_options = ' '.join(args[1])
 
-    if not pandoc_options :
+    if not pandoc_options:
         print("pandoc options must be provided!\n")
         parser.print_help()
         exit()
 
-    config.setCommand("pandoc " + pandoc_options)
+    config.set_command("pandoc " + pandoc_options)
 
-def main():
 
+def main(): # pylint: disable-msg=C0111
     pandoc_path = which("pandoc")
-    if not pandoc_path :
-        print("pandoc executable must be in the path to be used by pandoc-watch!")
+    if not pandoc_path:
+        print("pandoc executable must be in the path!", file=sys.stderr)
         exit()
 
     config = Configuration()
-
     parse_options()
-
-    config.setDirContentAndTime(getDirectoryWatchedElements())
+    config.set_dir_content_and_time(get_directory_watched_elements())
 
     print("Starting pandoc watcher ...")
-
     while True:
         event_handler = ChangeHandler()
         observer = Observer()
@@ -197,7 +227,6 @@ def main():
             observer.stop()
 
         print("Stopping pandoc watcher ...")
-
         exit()
 
 if __name__ == '__main__':
