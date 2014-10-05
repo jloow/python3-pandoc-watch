@@ -55,35 +55,10 @@ class Configuration(metaclass=Singleton):
     """ Configuration for pandocwatch. """
 
     def __init__(self):
-        self._command = ""
-        self._dirContentAndTime = ""
-        self._excludedFileExtensions = []
-        self._excludedFolders = []
-
-    def set_command(self, command):
-        self._command = command
-
-    def get_command(self):
-        return self._command
-
-    def set_excluded_file_extensions(self, excluded_file_extensions):
-        self._excludedFileExtensions = excluded_file_extensions
-
-    def get_excluded_file_extensions(self):
-        return self._excludedFileExtensions
-
-    def set_dir_content_and_time(self, dir_content_and_time):
-        self._dirContentAndTime = dir_content_and_time
-
-    def get_dir_content_and_time(self):
-        return self._dirContentAndTime
-
-    def set_execluded_folders(self,excluded_folders):
-        self._excludedFolders = excluded_folders
-
-    def get_execluded_folders(self):
-        return self._excludedFolders
-
+        self.command = ""
+        self.dir_content_and_time = ""
+        self.excluded_file_extensions = []
+        self.excluded_folders = []
 
 def getext(filename):
     """Get the file extension.
@@ -112,11 +87,11 @@ def get_directory_watched_elements():
     elements = []
     for path in os.listdir(os.getcwd()):
         path_to_remove = False
-        for extension in config.get_excluded_file_extensions():
+        for extension in config.excluded_file_extensions:
             if path.endswith(extension):
                 path_to_remove = True
                 break
-        if not path_to_remove and not path in config.get_execluded_folders():
+        if not path_to_remove and not path in config.excluded_folders:
             elements.append((path, os.stat(path).st_mtime))
     return elements
 
@@ -128,11 +103,11 @@ def recompile():
     """
     config = Configuration()
     print("Updating the output at %s" % get_now(), file=sys.stderr)
-    print("executing command : {}".format(config.get_command()))
+    print("executing command : {}".format(config.command))
     os.chdir(os.path.abspath(os.getcwd()))
     try:
         subprocess.check_output(
-            config.get_command(),
+            config.command,
             stderr=subprocess.STDOUT,
             shell=True,
             universal_newlines=True
@@ -148,13 +123,12 @@ class ChangeHandler(FileSystemEventHandler):
         local_dir_content = get_directory_watched_elements()
         found = False
         for (path, m_time) in local_dir_content:
-            for (bpath, bm_time) in config.get_dir_content_and_time():
+            for (bpath, bm_time) in config.dir_content_and_time:
                 if path == bpath:
                     if m_time > bm_time:
                         print("File {} has changed. Recompiling.".format(path))
                         found = True
-
-                        config.set_dir_content_and_time(local_dir_content)
+                        config.dir_content_and_time = local_dir_content
                         recompile()
                         print("Recompilation done")
                         break
@@ -162,7 +136,12 @@ class ChangeHandler(FileSystemEventHandler):
                 break
 
 
-def parse_options():
+def build_args():
+    """ Build the CLI options.
+
+    Returns:
+        argparse.ArgumentParser for pandocwatch's arguments.
+    """
     pandoc_output = subprocess.check_output(["pandoc", "--help"],
                                             universal_newlines=True)
     added_epilog = '\n'.join(str(pandoc_output).split("\n")[1:])
@@ -180,27 +159,31 @@ def parse_options():
                         help="The extensions (.pdf for pdf files) "
                         "or the folders to exclude from watch "
                         "operationsr, separated by commas")
-    args = parser.parse_known_args()
+    return parser
 
+
+def setup_config(args_parser):
+    """Set the configuration settings in accordance with the CLI args.
+    """
+    args = args_parser.parse_known_args()
     exclusions = args[0].exclusions
     exclusions = exclusions.split(",")
-
     config = Configuration()
 
-    config.set_excluded_file_extensions(
+    config.excluded_file_extensions = (
         [value for value in exclusions if value.startswith(".")])
-    config.set_execluded_folders(
+    config.excluded_folders = (
         list(set(exclusions)
-             .symmetric_difference(set(config.get_excluded_file_extensions()))))
+             .symmetric_difference(set(config.excluded_file_extensions))))
 
     pandoc_options = ' '.join(args[1])
 
     if not pandoc_options:
         print("pandoc options must be provided!\n")
-        parser.print_help()
+        args_parser.print_help()
         exit()
 
-    config.set_command("pandoc " + pandoc_options)
+    config.command = "pandoc " + pandoc_options
 
 
 def main(): # pylint: disable-msg=C0111
@@ -210,8 +193,8 @@ def main(): # pylint: disable-msg=C0111
         exit()
 
     config = Configuration()
-    parse_options()
-    config.set_dir_content_and_time(get_directory_watched_elements())
+    setup_config(build_args())
+    config.dir_content_and_time = get_directory_watched_elements()
 
     print("Starting pandoc watcher ...")
     while True:
