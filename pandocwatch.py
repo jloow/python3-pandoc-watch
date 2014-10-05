@@ -38,28 +38,17 @@ def which(program):
     return None
 
 
-class Singleton(type):
-    """ Dead-simple singleton metaclass.
-
-    Taken from:
-    http://stackoverflow.com/questions/6760685/creating-a-singleton-in-python
-    """
-    _instances = {}
-    def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args,
-                                                                 **kwargs)
-        return cls._instances[cls]
-
-
-class Configuration(metaclass=Singleton):
+class Configuration(object):
     """ Configuration for pandocwatch. """
 
-    def __init__(self):
-        self.command = ""
-        self.dir_content_and_time = ""
-        self.excluded_file_extensions = []
-        self.excluded_folders = []
+    def __init__(self, pandoc_options=None, exclusions=None):
+        self.command = 'pandoc ' + pandoc_options
+        self.excluded_file_extensions = (
+            [value for value in exclusions if value.startswith(".")])
+        self.excluded_folders = (
+            list(set(exclusions)
+                 .symmetric_difference(set(self.excluded_file_extensions))))
+        self.dir_content_and_time = self.watched_elements()
 
     def watched_elements(self):
         """ Get a list of elements that we are watching. """
@@ -75,12 +64,11 @@ class Configuration(metaclass=Singleton):
         return elements
 
 
-def recompile():
+def recompile(config):
     """Run pandoc, printing the program's output.
 
     Writes the error to STDOUT if present.
     """
-    config = Configuration()
     print("Updating the output at {}"
           .format(datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")),
           file=sys.stderr)
@@ -100,18 +88,21 @@ def recompile():
 class ChangeHandler(FileSystemEventHandler):
     """Handler for watching a folder for changes and running pandoc."""
 
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
+        super(ChangeHandler, self).__init__(*args, **kwargs)
+
     def on_modified(self, event):
-        config = Configuration()
-        local_dir_content = config.watched_elements()
+        local_dir_content = self.config.watched_elements()
         found = False
         for (path, m_time) in local_dir_content:
-            for (bpath, bm_time) in config.dir_content_and_time:
+            for (bpath, bm_time) in self.config.dir_content_and_time:
                 if path == bpath:
                     if m_time > bm_time:
                         print("File {} has changed. Recompiling.".format(path))
                         found = True
-                        config.dir_content_and_time = local_dir_content
-                        recompile()
+                        self.config.dir_content_and_time = local_dir_content
+                        recompile(self.config)
                         print("Recompilation done")
                         break
             if found:
@@ -151,14 +142,6 @@ def setup_config(args_parser):
     """
     args = args_parser.parse_known_args()
     exclusions = args[0].exclusions.split(',')
-    config = Configuration()
-
-    config.excluded_file_extensions = (
-        [value for value in exclusions if value.startswith(".")])
-    config.excluded_folders = (
-        list(set(exclusions)
-             .symmetric_difference(set(config.excluded_file_extensions))))
-
     pandoc_options = ' '.join(args[1])
 
     if not pandoc_options:
@@ -166,7 +149,7 @@ def setup_config(args_parser):
         args_parser.print_help()
         exit()
 
-    config.command = "pandoc " + pandoc_options
+    return Configuration(pandoc_options, exclusions)
 
 
 def main(): #pylint: disable=missing-docstring
@@ -175,13 +158,11 @@ def main(): #pylint: disable=missing-docstring
         print("pandoc executable must be in the path!", file=sys.stderr)
         exit()
 
-    config = Configuration()
-    setup_config(build_args())
-    config.dir_content_and_time = config.watched_elements()
+    config = setup_config(build_args())
 
     print("Starting pandoc watcher ...")
     while True:
-        event_handler = ChangeHandler()
+        event_handler = ChangeHandler(config)
         observer = Observer()
         observer.schedule(event_handler, os.getcwd(), recursive=True)
         observer.start()
