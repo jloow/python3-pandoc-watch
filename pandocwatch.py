@@ -74,22 +74,15 @@ class Configuration(metaclass=Singleton):
         return elements
 
 
-def get_now():
-    """Gets the current date and time.
-
-    Returns:
-        The current date and time, formatted for this program's UI.
-    """
-    return datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-
-
 def recompile():
     """Run pandoc, printing the program's output.
 
     Writes the error to STDOUT if present.
     """
     config = Configuration()
-    print("Updating the output at %s" % get_now(), file=sys.stderr)
+    print("Updating the output at {}"
+          .format(datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")),
+          file=sys.stderr)
     print("executing command : {}".format(config.command))
     os.chdir(os.path.abspath(os.getcwd()))
     try:
