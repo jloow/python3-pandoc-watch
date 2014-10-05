@@ -60,6 +60,19 @@ class Configuration(metaclass=Singleton):
         self.excluded_file_extensions = []
         self.excluded_folders = []
 
+    def watched_elements(self):
+        """ Get a list of elements that we are watching. """
+        elements = []
+        for path in os.listdir(os.getcwd()):
+            path_to_remove = False
+            for extension in self.excluded_file_extensions:
+                if path.endswith(extension):
+                    path_to_remove = True
+                    break
+            if not path_to_remove and not path in self.excluded_folders:
+                elements.append((path, os.stat(path).st_mtime))
+        return elements
+
 def getext(filename):
     """Get the file extension.
 
@@ -80,20 +93,6 @@ def get_now():
         The current date and time, formatted for this program's UI.
     """
     return datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-
-
-def get_directory_watched_elements():
-    config = Configuration()
-    elements = []
-    for path in os.listdir(os.getcwd()):
-        path_to_remove = False
-        for extension in config.excluded_file_extensions:
-            if path.endswith(extension):
-                path_to_remove = True
-                break
-        if not path_to_remove and not path in config.excluded_folders:
-            elements.append((path, os.stat(path).st_mtime))
-    return elements
 
 
 def recompile():
@@ -120,7 +119,7 @@ def recompile():
 class ChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         config = Configuration()
-        local_dir_content = get_directory_watched_elements()
+        local_dir_content = config.watched_elements()
         found = False
         for (path, m_time) in local_dir_content:
             for (bpath, bm_time) in config.dir_content_and_time:
@@ -194,7 +193,7 @@ def main(): # pylint: disable-msg=C0111
 
     config = Configuration()
     setup_config(build_args())
-    config.dir_content_and_time = get_directory_watched_elements()
+    config.dir_content_and_time = config.watched_elements()
 
     print("Starting pandoc watcher ...")
     while True:
