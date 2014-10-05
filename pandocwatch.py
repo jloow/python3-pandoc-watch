@@ -84,7 +84,7 @@ def recompile():
     print("Updating the output at {}"
           .format(datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")),
           file=sys.stderr)
-    print("executing command : {}".format(config.command))
+    print("{}".format(config.command))
     os.chdir(os.path.abspath(os.getcwd()))
     try:
         subprocess.check_output(
@@ -93,7 +93,6 @@ def recompile():
             shell=True,
             universal_newlines=True
         )
-        print("No error found")
     except subprocess.CalledProcessError as err:
         print("Error:\n{}".format(err.output))
 
@@ -127,21 +126,23 @@ def build_args():
     """
     pandoc_output = subprocess.check_output(["pandoc", "--help"],
                                             universal_newlines=True)
-    added_epilog = '\n'.join(str(pandoc_output).split("\n")[1:])
     epilog = ("-------------------------------------------\n"
               "Pandoc standard options are: \n\n{}"
-              .format(added_epilog))
+              .format('\n'.join(str(pandoc_output).split("\n")[1:])))
+
     parser = argparse.ArgumentParser(
         description="Watcher for pandoc compilation",
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter)
+
     parser.add_argument("-e", "--exclude",
                         dest="exclusions",
                         default=".pdf,.tex,doc,bin,common",
                         required=False,
                         help="The extensions (.pdf for pdf files) "
                         "or the folders to exclude from watch "
-                        "operationsr, separated by commas")
+                        "operations, separated by commas")
+
     return parser
 
 
@@ -149,8 +150,7 @@ def setup_config(args_parser):
     """Set the configuration settings in accordance with the CLI args.
     """
     args = args_parser.parse_known_args()
-    exclusions = args[0].exclusions
-    exclusions = exclusions.split(",")
+    exclusions = args[0].exclusions.split(',')
     config = Configuration()
 
     config.excluded_file_extensions = (
