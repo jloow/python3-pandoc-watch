@@ -73,18 +73,6 @@ class Configuration(metaclass=Singleton):
                 elements.append((path, os.stat(path).st_mtime))
         return elements
 
-def getext(filename):
-    """Get the file extension.
-
-    Args:
-        filename: The pathname to the file.
-
-    Returns:
-        The extension of the filename in lowercase.
-    """
-
-    return os.path.splitext(filename)[-1].lower()
-
 
 def get_now():
     """Gets the current date and time.
