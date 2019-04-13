@@ -30,6 +30,17 @@ You sure need to have a functionnal installation of `pandoc` on your machine and
 
 You can download it from John Mac Farlane dedicated website : [http://johnmacfarlane.net/pandoc](http://johnmacfarlane.net/pandoc)
 
+### Instructions for Windows
+
+After installing `watchdog` and cloning the repository, cd into the
+`python3-pandoc-watch` directory and run:
+
+```
+python setup.py install
+```
+
+You should now be able to run `pandoc-watch` under Windows.
+
 ## How to use `pandoc-watch`
 
 `pandoc-watch` mainly adds an extra argument to the `pandoc` standard options : `-e,--exclude` used to exclude:
